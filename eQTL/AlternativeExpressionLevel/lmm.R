@@ -1,5 +1,18 @@
 library(car)
 
+rowSums2 <- function(x) {
+  if (is.data.frame(x) || is.matrix(x)) {
+    # For data frames or matrices with multiple columns
+    row_sums <- rowSums(x)
+  } else {
+    # For single column vectors
+    row_sums <- x
+  }
+
+  return(row_sums)
+}
+
+
 fix_alias <- function(model) {
         # Get the alias information
         alias_info <- alias(model)
@@ -51,50 +64,70 @@ colnames(df) <- df[1, ]
 df <- df[-1, ]
 df <- as.data.frame(lapply(df, function(x) as.numeric(as.character(x))))
 #table = cleantable(df)
+express = df[,length(colnames(df))]
+#express = express - min(express)
+#df = df[which(express < median(express ) + 2*sd(express)),]
 
-testallele = args[2]
-#testallele = colnames(df)[testindex]
-
-text <- args[3]
-select_col <- strsplit(text, split = ",")[[1]]
-#integer_vector <- as.integer(split_text)
-select_col <- select_col[select_col %in% colnames(df) ]
-
-if (length(select_col) == 0)
+if (length(rownames(df)) < 10)
 {
         quit()
 }
 
-df$nonalelle <- rowSums(df[, select_col])
+testalelle = args[2]
+#testallele = colnames(df)[testindex]
+response_var <- colnames(df)[length(colnames(df))]
+text <- args[3]
+select_col <- strsplit(text, split = ",")[[1]]
+#integer_vector <- as.integer(split_text)
+select_col <- select_col[which(select_col %in% colnames(df) & select_col != testalelle )]
+
+df$nonalelle <- rowSums2(df[, select_col])
+
 table = df
 
-express = table[,length(colnames(table))-1]
-express = express - min(express)
-#table = table[which(express < 2 * median(express )),]
+if (length(select_col) == 0 || (! testalelle %in% colnames(df)) || length(which(df$nonalelle > 0 ) ) <10 || length(which(df[,testalelle ] > 0 ) ) < 10  )
+{
+        quit()
+}
 
-response_var <- colnames(df)[length(colnames(table))-1]
+df$nonalelle <- rowSums2(df[, select_col])
+table = df
+#express = express - min(express)
 
 #fixed_effects <- c(colnames(table)[3:length(colnames(table))-1])
 fixed_effects <- c(colnames(df)[!colnames(df) %in% select_col])
 
 
 fixed_effects <- fixed_effects[-length(fixed_effects)]
-fixed_effects <- c(fixed_effects[-length(fixed_effects)], testallele ,"nonalelle")
+fixed_effects <- c(fixed_effects[-length(fixed_effects)],"nonalelle")
 
 # Create the formula string for fixed effects
 fixed_effects_str <- paste(fixed_effects, collapse = " + ")
-
 #SMN1 ~ exSMN1 + exSMN2 + exSMN0
 # Complete formula string
 formula_str <- paste(response_var, "~", fixed_effects_str, "+0")
-
 # Convert to a formula object
 model_formula <- as.formula(formula_str)
 
 model <- lm(model_formula , data = table)
 model = fix_alias(model)
 
-formula_str2 <- paste(testallele, ' -  nonalelle = 0', collapse = "")
-result = linearHypothesis(model, formula_str2 ,test='F')
-summary(model)
+
+# Extract coefficients
+coefficients <- coef(model)
+
+
+formula_str2 <- paste(testalelle, ' - nonalelle = 0', collapse = "")
+result = linearHypothesis(model, formula_str2 ,test='Chisq')
+
+
+testalelle_count = sum(table[,testalelle])
+nonalelle_count = sum(table$nonalelle)
+
+testalelle_express = coefficients[testalelle]
+nonalelle_express = coefficients["nonalelle"]
+
+cat(paste(nonalelle_count, nonalelle_express, sep = "\t"), "\n")
+cat(paste(testalelle_count, testalelle_express, sep = "\t"), "\n")
+
 as.data.frame(result)
