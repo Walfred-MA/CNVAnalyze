@@ -4,7 +4,7 @@ Snakemake: Pipeline.
 
 QTL_Lmm.py: python script to call lmm.R in bash.
 
-lmm.R: the R code to apply linear-mixed-model to test alternative gene expression.
+lmm.R: the R code to apply linear-mixed-model to estimate gene expression level on each tissue.
 
 
 summary.sh: commands used to summary all results.
