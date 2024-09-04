@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+import os
+
+appris = "./appris_data.appris_MANE.txt"
+result_fd = "results/"
+resource_fd = "../../fourthrun/Groups/"
+
+
+database_fd = "../../firstrun/newGeneCopies/"
+
+
+allinputs = [result_fd+x for x in os.listdir(resource_fd) if x.endswith(".fasta_annotate.fa")]
+
+
+rule all:
+        input:
+                inputs = ["{}".format(group) for group in allinputs],
+                outputs = ["{}_exon.list".format(group) for group in allinputs],
+                PAs = ["{}_PA.list".format(group) for group in allinputs],
+
+rule genotype:
+        input:
+                group = "{group}",
+        resources:
+                mem_mb=10000,
+                slurm_extra="--mem=10G -c 1 "
+        threads: 1
+        output:
+                out = "{group}_exon.list",
+        run:
+                groupname = wildcards.group.split("/")[-1]
+
+                prefix1 = groupname.split("_")[0]
+
+                alignfile = "{}/{}_hotspots/HG38_h1_hotspot.txt.fa.paf".format(database_fd+prefix1,prefix1)
+                apprisfile = appris
+                gfffile  = "{}/{}.gff3".format(database_fd+prefix1,prefix1)
+
+
+                shell (" python  mergeRefTrans.py -i {alignfile} -a {apprisfile} -g {gfffile} -o {output.out} ")
+
+
+rule assign:
+        input:
+                group = "{group}",
+                exon = "{group}_exon.list",
+        resources:
+                mem_mb=10000,
+                slurm_extra="--mem=10G -c 1 "
+        threads: 1
+        output:
+                out = "{group}_PA.list",
+        run:
+                groupname = wildcards.group.split("/")[-1]
+                prefix1 = groupname.split("_")[0]
+
+                alignfolder = "{}/{}_hotspots/".format(database_fd+prefix1,prefix1)
+                alignfiles = [alignfolder+x for x in os.listdir(alignfolder) if x.endswith("_hotspot.txt.fa.paf")]
+
+                for alignfile in alignfiles:
+
+                        shell (" python  AssignPA.py -i {alignfile} -t {input.group} -a {input.exon} -o {output.out} ")
