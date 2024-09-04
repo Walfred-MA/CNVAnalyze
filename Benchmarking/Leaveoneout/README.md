@@ -1,4 +1,6 @@
 This is the alignment comprison to the original assemblies during leave-one-out analysis.
 
-Snakemake_generate_leaveoneout_dababase: the snakemake pipeline to create leave-one-out database for all HPRC assemblies. 
+Leaveoneout_database: building the database excluding original assemblies for each hprc sample
+Match: the matching script used to match genotyping results to original assemblies/GRCH38 alleles.
+Align: the script to perform global pairwise alignment between genotyping results and original assemblies/GRCH38 alleles.
 
