@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+
+
+import os
+import collections as cl
+
+genecode = "/project/mchaisso_100/cmb-16/walfred/database/gencode.v38_37_29_fix.gff3"
+reportQTL = "rst" 
+vcffolder = "/project/mchaisso_100/datasets/expression/Geuvadis/genotype"
+svfile = "/project/mchaisso_100/datasets/expression/Geuvadis/genotype/ALL.phase1_release_v3.20101123.snps_indels_sv.sites.gdid.gdannot.v2.vcf.gz" 
+headerfile = "/project/mchaisso_100/datasets/expression/Geuvadis/genotype/GEUVADIS.chr10.PH1PH2_465.IMPFRQFILT_BIALLELIC_PH.annotv2.genotypes.vcf.gz"
+
+redundant = "redundant_var.txt"
+result_fd = "results"
+resource_fd = "../getmatrix2/geuvadis/matrix_log"
+# Generate list of .bam files
+
+allinputs = [x for x in os.listdir(resource_fd) if x.endswith("_matrix.txt")]
+rule all:
+        input:
+                alloutputs = ["{}/{}_corr.txt".format(result_fd, x) for x in allinputs],
+                alloutputs2 = ["{}/{}_ftest.txt".format(result_fd, x) for x in allinputs],
+
+rule express:
+        input:
+                group = "{resource_fd}/{group}".format(resource_fd=resource_fd, group="{group}")
+        resources:
+                mem_mb=2000,
+                slurm_extra="--mem=2G -c 1 "
+        threads: 1
+        output:
+                out = "{result_fd}/{group}_corr.txt".format(result_fd=result_fd, group="{group}")
+        run:
+                shell("touch {output.out} || true")
+                shell("/home1/wangfeim/miniconda3/envs/peer-env/bin/Rscript  testexpress.R {input.group} > {output.out} || true")
+
+
+rule linear:
+        input:  
+                group = "{resource_fd}/{group}".format(resource_fd=resource_fd, group="{group}")
+        resources:
+                mem_mb=2000,
+                slurm_extra="--mem=2G -c 1 "
+        threads: 1
+        output: 
+                out = "{result_fd}/{group}_ftest.txt".format(result_fd=result_fd, group="{group}")
+        run:
+                shell("touch {output.out} || true")
+                shell("/home1/wangfeim/miniconda3/envs/peer-env/bin/Rscript testlinear.R {input.group} > {output.out} || true") 
