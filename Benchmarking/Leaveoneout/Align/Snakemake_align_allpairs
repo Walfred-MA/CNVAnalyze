@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+
+
+import os
+import random 
+pairfile = "restpairs.txt"
+fastafolder= "/panfs/qcb-panasas/wangfeim/Build/thirdrun/Groups/"
+svfolder = "bench_pairwise/"
+
+groupfiles = dict()
+fastafiles = [x for x in os.listdir(fastafolder) if x.endswith( "_annotate.fa" )] 
+
+for fastafile in fastafiles:
+
+        if fastafile.endswith("_annotate.fa"):
+
+                groupname = "_".join(fastafile.split("_")[:2])
+                groupfiles[groupname] = fastafolder + fastafile
+
+allpairs = set([])
+with open (pairfile, mode ='r') as f:
+
+        for line in f:
+                pair = line.strip().split(",")
+                allpairs.add((pair[0],pair[1]))
+
+numrunjobs = 10
+allpairs = list(allpairs)
+
+rule all:
+        input:
+                chunks = ["results/{}_results".format(index) for index in range(numrunjobs)],
+
+rule getpair:
+        params:
+                svfolder = svfolder,
+        resources:
+                mem_mb=100000,
+                slurm_extra="--mem=100G -c 1 "
+        threads: 1
+        output:
+                chunk = "results/{index}_results",
+        run:
+                index = int(output.chunk.split("/")[-1].split("_")[0])
+
+                for i, pair in enumerate(allpairs):
+
+                        if i % numrunjobs != index:
+                                continue
+
+
+                        groupname= "_".join(pair[0].split("_")[:2])
+
+                        pair1 = pair[0]
+                        pair2 = pair[1]
+
+
+                        if pair1.endswith("NA") or pair2.endswith("NA"):
+                                continue
+
+                        if pair1 == pair2:
+                                continue
+
+
+                        align = "{}{}_pairwise_{}_output.txt".format(svfolder,pair[0],pair[1])
+                        alignr = align+ "_r.txt"
+                        if os.path.isfile(align ) and os.stat(align).st_size >10 and os.path.isfile(alignr ) and os.stat(alignr).st_size >10:
+                                print("file exist: " + alignr )
+                                continue
+
+
+                        file1 = "{}{}.fa".format(svfolder,pair1)
+                        file1r = "{}{}_r.fa".format(svfolder,pair1)
+                        file2 = "{}{}.fa".format(svfolder,pair2)
+
+                        fastafile = groupfiles[groupname]
+
+                        os.system("samtools faidx {} {} > {} ".format(fastafile,pair1,file1))
+                        os.system("samtools faidx {} {} -i > {}  ".format(fastafile,pair1,file1r))
+
+                        os.system("samtools faidx {} {} > {} ".format(fastafile,pair2, file2))
+
+
+                        os.system('stretcher {} {} -snucleotide2  -gapopen 16  -gapextend 4  {}'.format(file1, file2,align))
+
+                        os.system('stretcher {} {} -snucleotide2  -gapopen 16  -gapextend 4  {}'.format(file1r, file2,alignr))
+
+                        if os.path.isfile(align ) and os.stat(align).st_size >10 and os.path.isfile(alignr ) and os.stat(alignr).st_size >10:
+                                pass
+                        else:
+                                continue
+
+
+
+                        os.system('python /project/mchaisso_100/cmb-16/walfred/projects/CTGor/newrun/scripts/maskstretcher.py -i {} '.format(align) )   
+                        os.system('python /project/mchaisso_100/cmb-16/walfred/projects/CTGor/newrun/scripts/maskstretcher.py -i {} '.format(alignr) )
+
+
+                        os.system(' echo -n {}"," >> {} ; python /project/mchaisso_100/cmb-16/walfred/projects/CTGor/newrun/scripts/pairwisescore.py -i {} >> {} '.format(align, output.chunk , align, output.chunk) )
+
+                        os.system(' echo -n {}"," >> {} ; python /project/mchaisso_100/cmb-16/walfred/projects/CTGor/newrun/scripts/pairwisescore.py -i {} >> {} '.format(alignr , output.chunk ,alignr, output.chunk) )
+
+                        os.system('rm {} || true'.format(file1))
+                        os.system('rm {} || true'.format(file1r))
+                        os.system('rm {} || true'.format(file2))
+
+
+                        os.system('rm {} || true'.format(align))
+
+                        os.system('rm {} || true'.format(alignr))
+
+
+                shell (" touch {output.chunk} || true " )
