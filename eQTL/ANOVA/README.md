@@ -7,3 +7,7 @@ geuvliftover.py: because geuvedis QTL variants reported in HG19, we lift it to H
 anova_snp.R: ANOVA analysis on reported QTL variants.
 
 anova_type.R: ANOVA analysis on ctyper genotyping results.
+
+summary.sh: command used to summarize results.
+
+summary.py: python script called by summary.sh.
