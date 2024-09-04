@@ -4,5 +4,5 @@ Snakemake_align_allpairs: snakemake pipeline to perform all alignments between e
 
 pickstrand.py: the simple code to find the strands of each pair for comprison, in case they might in different strand.
 
-comparetoleave.py: summary the results from alignments.
+comparetoleave.py, comparetoref.py: summary the results from alignments for both leave-one-out comprison and GRCH38 comparison.
 
