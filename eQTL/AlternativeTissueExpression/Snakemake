@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+
+import os
+#run: snakemake --cores 64 --keep-incomplete --wait-for-files --rerun-incomplete --latency-wait 100 --nt
+slurm=" --account=mchaisso_100 --time 50:00:00 --partition=qcb "
+SourceFolder = "../../eQTLs/getmatrix/Groups"
+SaveFolder = "results"
+MatrixFolder = "./matrix/"
+
+allprefixes = [file[:-len("_annotate.fa_typeannotate.txt")] for file in os.listdir(SourceFolder) if file.endswith( "_annotate.fa_typeannotate.txt")  ]
+
+#allprefixes =  [SaveFolder+"AMY_group1_AMY1AOOOAMY1BOOOAMY1C.fasta"]
+rule all:
+        input:  
+                typeannotates = ["{}/{}".format(SaveFolder,prefix+"_annotate.fa_typeannotate.txt_check") for prefix in allprefixes  ],
+
+
+
+rule typing:
+        input:
+                typeannotate = "{SourceFolder}/{prefix}_annotate.fa_typeannotate.txt".format(SourceFolder=SourceFolder, prefix="{prefix}"),
+        resources:
+                mem_mb=2000,
+                slurm_extra="--mem=2G -c 1 "
+        threads: 1
+        output:
+                typeannotate_check = "{SaveFolder}/{prefix}_annotate.fa_typeannotate.txt_check".format(SaveFolder=SaveFolder, prefix="{prefix}"),
+        run:
+
+                shell ("python QTL_Lmm.py -i {input.typeannotate} -m {MatrixFolder} -o results/  ")
+                shell ("touch {output.typeannotate_check}")
