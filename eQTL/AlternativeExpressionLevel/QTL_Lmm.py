@@ -39,9 +39,15 @@ def main(args):
 
                         index += 1
                         line = line.split()
+
                         name, genes, locus = line[0], line[3],line[4]
 
-                        genes = [x.split(":")[0].split("(")[0] for x in genes.split(";")] if genes != "NA" else []
+                        if "Patial" in genes:
+
+                                genes = locus.split(":")[0].split("(")[0]  
+                                genes = [genes] if genes != "NA" else [] 
+                        else:   
+                                genes = [x.split(":")[0].split("(")[0] for x in genes.split(";")] if genes != "NA"  else []
 
                         alleletogenes[name] = genes 
 
@@ -50,7 +56,6 @@ def main(args):
 
                                 paralogs[gene].append(index)
                         names.append(name)
-
         for refgene, group in paralogs.items():
 
                 if len(group) < 2:
