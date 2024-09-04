@@ -1,1 +1,1 @@
-The script to make expression matrices for each gene units for later analysis based on corrected TPMs and genotyping results from ctyper.
+The script to make expression matrices for each gene units for later analysis by merging tables of corrected TPMs and genotyping results from ctyper.
