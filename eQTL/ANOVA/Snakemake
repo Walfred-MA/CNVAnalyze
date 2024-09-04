@@ -1,0 +1,398 @@
+#!/usr/bin/env python3
+
+import os
+import collections as cl
+
+genecode = "/project/mchaisso_100/cmb-16/walfred/database/gencode.v19.annotation.gff3"
+reportQTL = "rst" 
+vcffolder = "/project/mchaisso_100/datasets/expression/Geuvadis/genotype"
+svfile = "/project/mchaisso_100/datasets/expression/Geuvadis/genotype/ALL.phase1_release_v3.20101123.snps_indels_sv.sites.gdid.gdannot.v2.vcf.gz" 
+headerfile = "/project/mchaisso_100/datasets/expression/Geuvadis/genotype/GEUVADIS.chr10.PH1PH2_465.IMPFRQFILT_BIALLELIC_PH.annotv2.genotypes.vcf.gz"
+
+expressionfile = "../bams/geuvadis/log/corrected_pheno_matrix.csv"
+redundantexpressionfile = "../bams/geuvadis/log/redundant/corrected_pheno_matrix.csv"
+redundant = "redundant_var.txt"
+result_fd = "results"
+resource_fd = "../getmatrix2/geuvadis/matrix_log"
+# Generate list of .bam files
+
+liftoverresults = "All.geuv_coordinates.txt_merged.txt"
+
+#liftoverresults = "All.geuv_coordinates.txt_tohg19.txt"
+
+vcffiles = {thefile.split(".")[1]:"{}/{}".format(vcffolder, thefile) for thefile in os.listdir(vcffolder) if thefile.endswith(".genotypes.vcf.gz")}
+
+QTLfiles = {file.split(".")[0]:reportQTL+"/"+file for file in os.listdir(reportQTL)}
+
+
+
+
+with open(redundantexpressionfile, mode = 'r') as f:
+
+        names = [x.split(".")[0] for x in f.readline().split(",")[1:]]
+        nametoindex = dict()
+        for name in names:
+                nametoindex[name] = len(nametoindex)
+
+        samesamples = cl.defaultdict(lambda: [[] for x in range(len(nametoindex)+1)] )
+        for line in f:
+
+                line = line.split(",")
+                gene = line[0]
+                values = [float(x) for x in line[1:]]
+                for name, value in zip(names,values):
+                        samesamples[gene][nametoindex[name]].append(value)
+
+
+with open(redundant, mode = "w") as f:
+        for gene, pairs in samesamples.items():
+
+                num = 0
+                vars = 0.0
+                for pair in pairs:
+                        if len(pair) == 2:
+                                vars += (pair[1]-pair[0])**2
+                                num += 1
+
+                if num: 
+                        f.write(gene+"\t"+str(vars/num)+"\n")
+
+
+
+
+
+genenametoregion = dict()
+genenametoid = cl.defaultdict(list)
+with open(genecode, mode = 'r') as f:
+
+        for line in f:
+                if line.startswith("#"):
+                        continue
+
+                line = line.split()
+                if line[2] != 'gene':
+                        continue
+
+                text = line[-1].split(";")
+                gene_id= [x for x in text if x.startswith("gene_id=")][0][8:]
+                gene_name = [x for x in text if x.startswith("gene_name=")][0][10:]
+                genenametoid[gene_name].append(gene_id.split(".")[0])
+
+                if len(line[0]) < 6:
+                        genenametoregion[gene_name] = (line[0],int(line[3]), int(line[4]))
+
+"""
+liftover = cl.defaultdict(lambda: dict())
+with open(liftoverresults, mode = 'r') as f:
+
+        for line in f:
+
+                line = line.split()
+                liftover[line[0]][int(line[1])] = int(line[5])
+"""
+
+
+redundant_vars = dict()
+with open(redundant, mode = 'r') as f:
+
+        for line in f:
+                line = line.split()
+                redundant_vars[line[0][:-1].replace(";","_")] = float(line[1])
+
+
+allinputs = [x for x in os.listdir(resource_fd) if x.endswith("_matrix.txt")]
+
+rule all:
+        input:
+                out = ["{}/{}_anova.txt".format(result_fd,group) for group in allinputs],
+                outcount = ["{}/{}_QTLsites.list".format(result_fd,group) for group in allinputs],
+                vcf = ["{}/{}_all.vcf".format(result_fd,group) for group in allinputs], 
+                vcffilter = ["{}/{}_QTL.vcf".format(result_fd,group) for group in allinputs],
+                snpmatrix = ["{}/{}_QTL_matrix.txt".format(result_fd,group) for group in allinputs],
+                anova2 = ["{}/{}_snpanova.txt".format(result_fd,group) for group in allinputs],
+                bothmatrix = ["{}/{}_Both_matrix.txt".format(result_fd,group) for group in allinputs],
+                combineanova = ["{}/{}_combineanova.txt".format(result_fd,group) for group in allinputs],
+
+
+
+rule genotype:
+        input:
+                group = "{resource_fd}/{group}".format(resource_fd=resource_fd, group="{group}")
+        resources:
+                mem_mb=2000,
+                slurm_extra="--mem=2G -c 1 "
+        threads: 1
+        output:
+                out = "{result_fd}/{group}_anova.txt".format(result_fd=result_fd, group="{group}")
+        run:
+                shell("touch {output.out} || true")
+
+                redundant_var = redundant_vars[wildcards.group[:-11]]
+                shell(" ( /home1/wangfeim/miniconda3/envs/peer-env/bin/Rscript  anova_type.R {input.group} > {output.out} && echo ',{redundant_var}' >> {output.out} ) || true")
+
+
+
+
+rule QTLsites:
+        input:
+                group = "{resource_fd}/{group}".format(resource_fd=resource_fd, group="{group}")
+        resources:
+                mem_mb=2000,
+                slurm_extra="--mem=2G -c 1 "
+        threads: 1
+        output:
+                out = "{result_fd}/{group}_QTLsites.list".format(result_fd=result_fd, group="{group}")
+        run:
+                genenames = wildcards.group[:-11].split("_")
+                geneids = [x for genename in genenames for x in genenametoid.get(genename,[])]
+                qtlfiles = [QTLfiles[x] for x in geneids if x in QTLfiles]
+
+                shell("touch {output.out} || true")
+                for afile in qtlfiles:
+
+                        shell ("cat {afile} >> {output.out}")
+
+rule vcf:
+        input:
+                group = "{result_fd}/{group}_QTLsites.list".format(result_fd=result_fd, group="{group}")
+        resources:
+                mem_mb=2000,
+                slurm_extra="--mem=2G -c 1 "
+        threads: 1
+        output:
+                vcf = "{result_fd}/{group}_all.vcf".format(result_fd=result_fd, group="{group}"),
+                vcf_filter =  "{result_fd}/{group}_QTL.vcf".format(result_fd=result_fd, group="{group}")
+        run:
+                genenames = wildcards.group[:-11].split("_")
+
+                thechr = ""
+                chromsites = cl.defaultdict(set)
+                coorditopvalue = dict()
+                with open(input.group, mode = 'r') as f:
+
+                        for line in f:
+
+                                if line.startswith("Posterior") or len(line) == 0:
+                                        continue
+
+                                line = line.split()
+                                if len(line) < 5:
+                                        continue
+                                pvalue = line[1] if "chr" not in line[1] else line[2]
+                                posis = [x for x in line if "chr" in x]
+                                for posi in posis:
+                                        if posi.startswith("["):
+                                                posi = posi[1:-1]
+
+                                        thechr, coordi = posi.split(".")
+                                        #coordi = liftover[thechr][int(coordi)] 
+                                        coordi = coordi 
+
+                                        #if thechr not in  liftover or coordi not in liftover[thechr]:
+                                                #continue
+
+                                        coordi = int(coordi)
+
+                                        chromsites[thechr].add(coordi)
+                                        coorditopvalue[coordi] = pvalue
+
+
+                shell("bcftools view -h {headerfile} > {output.vcf} ")
+                shell("bcftools view -h {headerfile} > {output.vcf_filter} ")
+
+
+                for genename in genenames:
+
+
+
+                        if genename not in genenametoregion:
+                                continue
+
+                        thechr, start, end = genenametoregion[genename]
+                        if len(thechr) > 5:
+                                continue
+
+
+                        start = max(0, start - 50000)
+                        end = end + 50000
+
+                        if thechr not in vcffiles:
+                                continue
+
+                        vcffile = vcffiles[thechr]
+
+                        #print("bcftools view -H -r {thechr}:{start}-{end}  {svfile} >> {output.vcf} ")
+
+                        thechr =  thechr[3:]
+
+                        #shell("bcftools view -H -r {thechr}:{start}-{end}  {svfile} >> {output.vcf} ")
+
+                        shell("bcftools view -H -r {thechr}:{start}-{end}  {vcffile} >> {output.vcf} ")
+
+                with open(output.vcf_filter, mode = 'a' ) as f:
+
+                        with open(output.vcf, mode = 'r') as r:
+
+                                for line_ in r:
+
+                                        if line_.startswith("#"):
+
+                                                continue
+
+                                        line = line_.split('\t')
+
+                                        thechr, posi = line[0], int(line[1])
+
+                                        if (line[2].startswith("snp") or line[2].startswith("indel")) and posi not in chromsites["chr" + thechr]:
+
+                                                continue
+
+                                        pvalue = 0.0
+                                        if posi in chromsites["chr" + thechr]:
+                                                pvalue = coorditopvalue[posi]
+
+                                        line[2] += ":" + str(pvalue)
+
+
+                                        f.write("\t".join(line))
+
+rule vcftomatrix:
+        input:
+                thefile =  "{result_fd}/{group}_QTL.vcf".format(result_fd=result_fd, group="{group}"),
+                group = "{resource_fd}/{group}".format(resource_fd=resource_fd, group="{group}")
+        resources:
+                mem_mb=2000,
+                slurm_extra="--mem=2G -c 1 "
+        threads: 1
+        output:
+                out = "{result_fd}/{group}_QTL_matrix.txt".format(result_fd=result_fd, group="{group}")
+        run:
+                import numpy as np
+                matrix = []
+                with open(input.thefile, mode = 'r') as f:
+                        for line in f:
+                                if line.startswith("##"):
+                                        continue
+                                elif line.startswith("#"):
+                                        title = ["samplename"] + line.split()[9:]
+                                        break
+                        matrix.append((0.0 ,title ))
+                        for line in f:
+                                line = line.split('\t')
+                                genotype = line[9:]
+                                genotype = [x.split(":")[0].count("1") for x in genotype]
+                                if genotype.count(0) == len(genotype) or genotype.count(2) == len(genotype) :
+                                        continue
+
+                                pvalue = float(line[2].split(":")[-1])
+
+                                matrix.append( (pvalue  ,[line[2]]+genotype) )
+
+
+                if len(matrix) >= 46:
+                        matrix = [x for x in sorted(matrix)[:46]]
+
+
+                matrix = [x[1] for x in matrix]
+
+                with open(input.group, mode = 'r') as f:
+                        header = f.readline().split(",")
+
+                        for line in f:
+                                pass
+                        line = line.split(",")
+
+                express = {x:y for x,y in zip(header,line)}
+
+                usecols = [0]+[i for i,x in enumerate(title) if x in express]
+
+                express = ["express"] +[express.get(x, "NA") for x in title[1:]]
+
+                matrix.append(express)
+                matrix = np.matrix(matrix)
+
+                matrix = matrix[:, usecols]
+
+                with open(output.out, mode = 'w') as f:
+                        for row in matrix.tolist():
+                                f.write(",".join(list(map(str,row)))+"\n" )
+
+
+rule snpanova:
+        input:
+                group = "{result_fd}/{group}_QTL_matrix.txt".format(result_fd=result_fd, group="{group}")
+        resources:
+                mem_mb=2000,
+                slurm_extra="--mem=2G -c 1 "
+        threads: 1
+        output:
+                out = "{result_fd}/{group}_snpanova.txt".format(result_fd=result_fd, group="{group}")
+        run:
+                shell("touch {output.out} || true")
+
+                redundant_var = redundant_vars[wildcards.group[:-11]]
+                shell(" ( /home1/wangfeim/miniconda3/envs/peer-env/bin/Rscript  anova_snp.R {input.group} > {output.out} && echo ',{redundant_var}' >> {output.out} ) || true")
+
+
+rule combinematrix:
+        input:
+                group = "{resource_fd}/{group}".format(resource_fd=resource_fd, group="{group}"),
+                QTLmatrix = "{result_fd}/{group}_QTL_matrix.txt".format(result_fd=result_fd, group="{group}"),
+        resources:
+                mem_mb=2000,
+                slurm_extra="--mem=2G -c 1 "
+        threads: 1
+        output:
+                out = "{result_fd}/{group}_Both_matrix.txt".format(result_fd=result_fd, group="{group}")
+        run:
+                text = []
+
+                with open(input.QTLmatrix, mode= 'r') as f:
+
+                        header = f.readline().strip()
+                        text.append(header)
+                        header = header.split(",")[1:]
+                        for line in f:
+                                text.append(line.strip())
+
+                express = text.pop()
+                headerindex = {x:i for i,x in enumerate(header)}
+
+                with open(input.group, mode= 'r') as f:
+
+                        header = f.readline().strip()
+                        header = header.split(",")[1:]
+
+                        useindex = [headerindex.get(x,-1) for x in header]
+                        for line in f:
+                                line = line.strip().split(",")
+
+                                newline = [line[0]]+["0"]*len(headerindex)
+
+                                for x,i in zip(line[1:],useindex):
+
+                                        if i >= 0:
+
+                                                newline[i+1] = x
+
+                                text.append(",".join(newline))
+
+                result = "\n".join(text)
+
+                with open(output.out, mode = 'w') as f:
+                        f.write(result)
+
+rule combineanova:
+        input:
+                group = "{result_fd}/{group}_Both_matrix.txt".format(result_fd=result_fd, group="{group}")
+        resources:
+                mem_mb=2000,
+                slurm_extra="--mem=2G -c 1 "
+        threads: 1
+        output:
+                out = "{result_fd}/{group}_combineanova.txt".format(result_fd=result_fd, group="{group}")
+        run:
+                shell("touch {output.out} || true")
+
+                redundant_var = redundant_vars[wildcards.group[:-11]]
+                shell(" ( /home1/wangfeim/miniconda3/envs/peer-env/bin/Rscript  anova_snp.R {input.group} > {output.out} && echo ',{redundant_var}' >> {output.out} ) || true")
