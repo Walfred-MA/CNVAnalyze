@@ -1,0 +1,68 @@
+import os
+#run: snakemake --cores 64 --keep-incomplete --wait-for-files --rerun-incomplete --latency-wait 100 --nt
+
+RefGenes = "/project/mchaisso_100/cmb-16/walfred/database/gencode.v38_37_29_fix.gff3"
+HG38 = "/project/mchaisso_100/cmb-16/walfred/database/hg38_full.fa"
+CHM13 = "/project/mchaisso_100/cmb-16/walfred/database/GCF_009914755.1_T2T-CHM13v2.0_genomic.fa"
+QueryPath = "/panfs/qcb-panasas/wangfeim/Build/query_pathes.txt"
+TempFolder = "temps/"
+WkFolder = "/panfs/qcb-panasas/wangfeim/Build/thirdrun/Groups/"
+SaveFolder = "LeaveGroups/"
+ScriptFolder = "/project/mchaisso_100/cmb-16/walfred/projects/CTGor/newrun/scripts/"
+nthreads = 32
+AnchorSize = 1000
+kmertype = 31
+
+queries = {}
+with open(QueryPath, mode = 'r') as f:
+        for line in f:
+                line = line.split()
+                queries[line[0]] = line[1]
+
+wksamples = list(queries.keys()) 
+wkassems = list(set( [x.split("_h")[0] for x in wksamples] ))
+wkassems = [x for x in wkassems if  "GW" not in x]
+
+for sample in wkassems:
+        try:
+                os.mkdir("{}/{}".format(SaveFolder,sample))
+        except:
+                pass
+
+queries["CHM13_h1"] = CHM13
+queries[ "HG38_h1"] = HG38
+
+allprefixes = [file for file in os.listdir(WkFolder) if file[-6:] == ".fasta" ]
+
+rule all:
+        input:
+                anchorfile  = [WkFolder + prefix+"_annotate.fa" for prefix in allprefixes],
+
+                kmerannotate=[WkFolder + prefix+"_annotate.fa_kmer.list" for prefix in allprefixes],
+
+                matrix=[SaveFolder + prefix+"_checker" for prefix in allprefixes],
+
+
+rule compilematrix:
+        input:
+                annotate = WkFolder + "{prefix}_annotate.fa",
+                kmerannotate = WkFolder + "{prefix}_annotate.fa_kmer.list",
+                graphalign = WkFolder + ancient("{prefix}_annotate.fa_allgraphalign.out"),
+        params:
+                qpath = QueryPath,
+                script = ScriptFolder,
+                hg38 = HG38
+        resources:
+                mem_mb=10000,
+                slurm_extra="--mem=10G -c 1 "
+        threads: 1
+        output:
+                matrix = SaveFolder  + "{prefix}_checker",
+        run:
+                for sample in wkassems:
+
+                        outputfile  = "{}{}/{}_matrix.txt".format(SaveFolder, sample, wildcards.prefix)
+
+                        shell (" python {params.script}/matrixcompile.py -s {input.annotate} -a {input.graphalign}  -k  {input.kmerannotate}  -o {outputfile} -e {sample}  ")
+
+                shell ("touch  {} ".format(output.matrix))
