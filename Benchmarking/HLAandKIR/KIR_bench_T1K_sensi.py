@@ -24,8 +24,8 @@ def HLAcomp(list1, list2):
 def HLAcomp2(list1, list2):
 	
 	
-	list1 = [x.split("*")[0]+x.split("*")[1][:3] for x in list1]
-	list2 = [x.split("*")[0]+x.split("*")[1][:3] for x in list2]
+	list1 = [x.split("*")[0]+x.split("*")[1][:5] for x in list1]
+	list2 = [x.split("*")[0]+x.split("*")[1][:5] for x in list2]
 	
 	common, uncommon2 = find_common(list1, list2)
 	return len(common), len(uncommon2)
@@ -33,8 +33,8 @@ def HLAcomp2(list1, list2):
 def HLAcomp3(list1, list2):
 	
 	
-	list1 = [x.split("*")[0] for x in list1]
-	list2 = [x.split("*")[0] for x in list2]
+	list1 = [x.split("*")[0]+x.split("*")[1][:3] for x in list1]
+	list2 = [x.split("*")[0]+x.split("*")[1][:3] for x in list2]
 	
 	common, uncommon2 = find_common(list1, list2)
 	return len(common), len(uncommon2)
