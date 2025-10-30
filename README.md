@@ -5,4 +5,4 @@ If you interested in using some of idea or methods include here in your own proj
 
 Some of code relies on intermediate results from prior analysis, which can be found at https://zenodo.org/records/13683015. Some others could be too big or too many files to all includes. Those data could be regenerated or accessed via requested from wangfeim@usc.edu and mchaisso@usc.edu. 
 
-The ctyper genotyping tool can be found at: https://github.com/ChaissonLab/Ctyper
+The under maintained ctyper genotyping tool can be found at: https://github.com/ChaissonLab/Ctyper
